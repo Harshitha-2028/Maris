@@ -153,26 +153,4 @@ class BlueCarbonClient:
 
 
 # Global instance
-# --- Lazy / optional singleton ---------------------------------
-import os
-
-_bluecarbon_client = None  # private cache
-
-def get_blockchain_client():
-    """
-    Return BlueCarbonClient() only if ENABLE_BLOCKCHAIN=1.
-    Otherwise return None so the API can boot without chain.
-    """
-    global _bluecarbon_client
-    if os.getenv("ENABLE_BLOCKCHAIN", "0") != "1":
-        return None
-    if _bluecarbon_client is None:
-        _bluecarbon_client = BlueCarbonClient()
-    return _bluecarbon_client
-
-# Backwards compatible export (won't connect unless ENABLE_BLOCKCHAIN=1)
-bluecarbon_client = get_blockchain_client()
-
-
-
-
+bluecarbon_client = BlueCarbonClient()
