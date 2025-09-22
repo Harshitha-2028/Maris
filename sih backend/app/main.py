@@ -5,8 +5,8 @@ BlueCarbon API Server - Integrated with Blockchain + MongoDB
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, validator
-from typing import Optional, Dict, Any
-from datetime import datetime, timezone
+from typing import Optional, Dict, Any, List
+from datetime import datetime, timezone, timedelta
 from web3 import Web3
 import os
 from dotenv import load_dotenv
@@ -53,6 +53,7 @@ class RegisterProjectRequest(BaseModel):
     description: str
     project_type: str
     location: str
+    owner_wallet: Optional[str] = None  # NEW: link a project to a user wallet
 
     @validator("project_id")
     def project_id_must_not_be_empty(cls, v):
@@ -92,15 +93,13 @@ class RetireCreditsRequest(BaseModel):
 
 
 # =======================
-#   ROUTES
+#   CORE ROUTES
 # =======================
 @app.get("/")
 async def root():
     projects = db_client.get_projects()
     total_projects = len(projects)
-    total_credits = sum(
-        p.get("balances", {}).get("total_issued", 0) for p in projects
-    )
+    total_credits = sum(p.get("balances", {}).get("total_issued", 0) for p in projects)
 
     return {
         "message": "🌿 BlueCarbon API - South India Carbon Registry",
@@ -152,16 +151,19 @@ async def register_project(
             status_code=400, detail=f"Project '{request.project_id}' already exists"
         )
 
+    # blockchain tx (register in registry/contract)
     tx = bluecarbon_client.register_project(
         request.project_id, request.metadata_cid, os.getenv("ADMIN_PRIVATE_KEY")
     )
 
+    # save to DB
     project_data = {
         "project_id": request.project_id,
         "name": request.name,
         "description": request.description,
         "project_type": request.project_type,
         "location": request.location,
+        "owner_wallet": (request.owner_wallet or "").lower(),  # NEW
         "status": "active",
         "balances": {"total_issued": 0, "total_retired": 0, "circulating": 0},
     }
@@ -195,7 +197,12 @@ async def issue_credits(
     )
 
     db_client.update_project_balance(request.project_id, request.amount, operation="issue")
-    db_client.log_transaction("credit_issuance", tx["tx_hash"], request.dict())
+
+    # NEW: record who issued (used by User dashboard)
+    issued_by = os.getenv("MINTER_ID", "minter-default")
+    db_client.log_transaction(
+        "credit_issuance", tx["tx_hash"], {**request.dict(), "issued_by": issued_by}
+    )
 
     return {
         "success": True,
@@ -242,7 +249,7 @@ async def get_project_history(project_id: str, limit: int = 50):
 
 @app.get("/balance/{address}/{project_id}")
 async def get_balance(address: str, project_id: str):
-    """Get balance of an address for a project"""
+    """Get balance of an address for a project (on-chain)"""
     if not Web3.is_address(address):
         raise HTTPException(status_code=400, detail="Invalid address")
 
@@ -290,15 +297,122 @@ async def update_registry_entry(
                 "gasPrice": bluecarbon_client.w3.eth.gas_price,
             }
         )
-
         result = bluecarbon_client._send_transaction(txn, os.getenv("ADMIN_PRIVATE_KEY"))
-        return {
-            "success": True,
-            "tx": result,
-            "message": f"Registry updated: {name} → {new_address}",
-        }
+        return {"success": True, "tx": result, "message": f"Registry updated: {name} → {new_address}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =======================
+#   NEW: ADMIN / USER / MINTER HELPERS
+# =======================
+
+@app.get("/admin/stats")
+async def admin_stats(admin_token: str = Depends(verify_admin_token)):
+    """KPIs for Admin dashboard"""
+    projects = db_client.get_projects(limit=10_000, skip=0)
+    total_projects = len(projects)
+    total_issued = sum(p.get("balances", {}).get("total_issued", 0) for p in projects)
+    total_tx = db_client.transactions.count_documents({})
+    total_users = db_client.users.count_documents({})
+    return {
+        "total_projects": total_projects,
+        "total_credits_issued": total_issued,
+        "total_transactions": total_tx,
+        "total_users": total_users,
+    }
+
+
+@app.get("/admin/transactions/series")
+async def tx_series(days: int = 14, admin_token: str = Depends(verify_admin_token)):
+    """
+    Returns [{ts: ISOString, count: int}] for the last `days` days from transactions.timestamp
+    """
+    end = datetime.now(timezone.utc).replace(hour=23, minute=59, second=59, microsecond=0)
+    start = end - timedelta(days=days - 1)
+
+    pipeline = [
+        {"$match": {"timestamp": {"$gte": start, "$lte": end}}},
+        {
+            "$group": {
+                "_id": {
+                    "y": {"$year": "$timestamp"},
+                    "m": {"$month": "$timestamp"},
+                    "d": {"$dayOfMonth": "$timestamp"},
+                },
+                "count": {"$sum": 1},
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "ts": {"$dateFromParts": {"year": "$_id.y", "month": "$_id.m", "day": "$_id.d"}},
+                "count": 1,
+            }
+        },
+        {"$sort": {"ts": 1}},
+    ]
+    rows = list(db_client.transactions.aggregate(pipeline))
+
+    # fill missing days
+    buckets = {r["ts"].date().isoformat(): int(r["count"]) for r in rows}
+    series = []
+    for i in range(days):
+        day = (start + timedelta(days=i)).date().isoformat()
+        series.append({"ts": f"{day}T00:00:00Z", "count": buckets.get(day, 0)})
+    return series
+
+
+@app.get("/user/{wallet}/projects")
+async def user_projects(wallet: str):
+    """Projects/plots linked to this wallet (owner_wallet)"""
+    wallet = wallet.lower()
+    cur = db_client.projects.find({"owner_wallet": wallet})
+    return [{k: v for k, v in doc.items() if k != "_id"} for doc in cur]
+
+
+@app.get("/user/{wallet}/credits")
+async def user_credits(wallet: str):
+    """Issued credits to this wallet from tx logs (for the User dashboard)"""
+    wallet = wallet.lower()
+    cur = (
+        db_client.transactions.find({"type": "credit_issuance", "details.to_address": wallet})
+        .sort("timestamp", -1)
+    )
+
+    out: List[Dict[str, Any]] = []
+    for tx in cur:
+        details = tx.get("details", {})
+        out.append({
+            "project_id": details.get("project_id"),
+            "amount": details.get("amount", 0),
+            "issued_by": details.get("issued_by", "unknown"),
+            "tx_hash": tx.get("tx_hash"),
+            "timestamp": tx.get("timestamp"),
+        })
+    return out
+
+
+@app.get("/minter/{minter_id}/assignments")
+async def minter_assignments(minter_id: str, token: str = Depends(verify_minter_token)):
+    """
+    Group users under a minter by community (requires user docs to have:
+    { wallet_address, minter_id, community? })
+    """
+    pipeline = [
+        {"$match": {"minter_id": minter_id}},
+        {
+            "$group": {
+                "_id": {"$ifNull": ["$community", "Unspecified"]},
+                "users": {"$addToSet": "$wallet_address"},
+            }
+        },
+        {"$project": {"_id": 0, "name": "$_id", "users": 1}},
+        {"$sort": {"name": 1}},
+    ]
+    communities = list(db_client.users.aggregate(pipeline))
+    total_users = sum(len(c.get("users", [])) for c in communities)
+    return {"minter_id": minter_id, "communities": communities, "total_users": total_users}
 
 
 # Startup
