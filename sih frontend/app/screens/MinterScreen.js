@@ -1,25 +1,23 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, Button, FlatList, TouchableOpacity, ScrollView } from "react-native";
+import Constants from "expo-constants";
 
-// 👇 Replace with your backend URL
-const API_URL = "http://<your-backend-ip>:8000";
+const API_URL = Constants.expoConfig?.extra?.API_URL ?? "http://10.0.2.2:8000";
 const MINTER_TOKEN = "minter-token-456";
 
 export default function MinterDashboard() {
-  const [projects, setProjects] = useState<any[]>([]);
-  const [selectedProject, setSelectedProject] = useState<any | null>(null);
+  const [projects, setProjects] = useState([]);
+  const [selectedProject, setSelectedProject] = useState(null);
   const [toAddress, setToAddress] = useState("");
   const [amount, setAmount] = useState("");
   const [proofCID, setProofCID] = useState("");
   const [message, setMessage] = useState("");
 
-  // fetch approved/active projects
   const fetchProjects = async () => {
     try {
       const res = await fetch(`${API_URL}/projects`);
       const data = await res.json();
-      // only show active ones (admin-approved)
-      const approved = data.filter((p: any) => p.status === "active");
+      const approved = Array.isArray(data) ? data.filter((p) => p.status === "active") : [];
       setProjects(approved);
     } catch (err) {
       console.error("Failed to fetch projects:", err);
@@ -30,7 +28,6 @@ export default function MinterDashboard() {
     fetchProjects();
   }, []);
 
-  // issue credits
   const handleIssue = async () => {
     if (!selectedProject) {
       setMessage("Select a project first");
@@ -56,7 +53,7 @@ export default function MinterDashboard() {
         setToAddress("");
         setAmount("");
         setProofCID("");
-        fetchProjects(); // refresh balances
+        fetchProjects();
       } else {
         setMessage(`❌ Error: ${data.detail || "Failed to issue"}`);
       }
@@ -70,7 +67,6 @@ export default function MinterDashboard() {
     <ScrollView className="flex-1 bg-white p-4">
       <Text className="text-primary text-2xl font-bold mb-4">Minter Dashboard</Text>
 
-      {/* Projects list */}
       <Text className="text-lg font-semibold mb-2">Approved Projects</Text>
       <FlatList
         data={projects}
@@ -88,31 +84,12 @@ export default function MinterDashboard() {
         )}
       />
 
-      {/* Issue credits form */}
       {selectedProject && (
         <View className="mt-4 border rounded-lg p-3">
           <Text className="font-semibold mb-2">Issue Credits for {selectedProject.project_id}</Text>
-
-          <TextInput
-            className="border p-2 my-2 rounded"
-            placeholder="User Wallet Address (0x...)"
-            value={toAddress}
-            onChangeText={setToAddress}
-          />
-          <TextInput
-            className="border p-2 my-2 rounded"
-            placeholder="Amount of credits"
-            keyboardType="numeric"
-            value={amount}
-            onChangeText={setAmount}
-          />
-          <TextInput
-            className="border p-2 my-2 rounded"
-            placeholder="Proof CID (ipfs://...)"
-            value={proofCID}
-            onChangeText={setProofCID}
-          />
-
+          <TextInput className="border p-2 my-2 rounded" placeholder="User Wallet Address (0x...)" value={toAddress} onChangeText={setToAddress} />
+          <TextInput className="border p-2 my-2 rounded" placeholder="Amount of credits" keyboardType="numeric" value={amount} onChangeText={setAmount} />
+          <TextInput className="border p-2 my-2 rounded" placeholder="Proof CID (ipfs://...)" value={proofCID} onChangeText={setProofCID} />
           <Button title="Issue Credits" color="#4CAF50" onPress={handleIssue} />
         </View>
       )}
