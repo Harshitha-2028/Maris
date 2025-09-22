@@ -175,3 +175,66 @@ class BlueCarbonDatabase:
 
 # Global database instance
 db_client = BlueCarbonDatabase()
+
+    # ---------- NEW: helper queries for dashboards ----------
+
+    def count_users(self) -> int:
+        return self.users.count_documents({})
+
+    def count_projects(self) -> int:
+        return self.projects.count_documents({})
+
+    def count_transactions(self) -> int:
+        return self.transactions.count_documents({})
+
+    def sum_total_credits_issued(self) -> int:
+        # sum of balances.total_issued across all projects
+        pipeline = [
+            {"$group": {"_id": None, "total": {"$sum": "$balances.total_issued"}}}
+        ]
+        agg = list(self.projects.aggregate(pipeline))
+        return int(agg[0]["total"]) if agg else 0
+
+    def get_projects_by_owner_wallet(self, wallet_address: str):
+        """
+        Return projects linked to a user (store 'owner_wallet' in project docs when registering).
+        """
+        return list(self.projects.find({"owner_wallet": wallet_address}, {"_id": 0}))
+
+    def get_user_credits_from_logs(self, wallet_address: str):
+        """
+        Return issuance transactions to this wallet across all projects.
+        Uses your transaction log (type='credit_issuance').
+        """
+        cur = (
+            self.transactions.find(
+                {"type": "credit_issuance", "details.to_address": wallet_address},
+                {"_id": 0}
+            )
+            .sort("timestamp", -1)
+        )
+        return list(cur)
+
+    def get_assignments_for_minter(self, minter_id: str):
+        """
+        Aggregate users under a minter, grouped by 'community' if present.
+        This assumes user docs have fields: wallet_address, minter_id, community (optional).
+        """
+        pipeline = [
+            {"$match": {"minter_id": minter_id}},
+            {
+                "$group": {
+                    "_id": {"$ifNull": ["$community", "Unspecified"]},
+                    "users": {"$addToSet": "$wallet_address"},
+                }
+            },
+            {"$project": {"_id": 0, "name": "$_id", "users": 1}},
+        ]
+        communities = list(self.users.aggregate(pipeline))
+        total_users = sum(len(c.get("users", [])) for c in communities)
+        return {
+            "minter_id": minter_id,
+            "communities": communities,
+            "total_users": total_users,
+        }
+
