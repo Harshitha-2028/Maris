@@ -13,7 +13,6 @@
       "backgroundColor": "#4CAF50"
     },
     "assetBundlePatterns": ["**/*"],
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bluecarbon.registry",
@@ -24,7 +23,6 @@
         "NSLocationWhenInUseUsageDescription": "This app may use your location for project metadata (optional)."
       }
     },
-
     "android": {
       "package": "com.bluecarbon.registry",
       "adaptiveIcon": {
@@ -32,34 +30,21 @@
         "backgroundColor": "#4CAF50"
       },
       "googleServicesFile": "./google-services.json",
-      "permissions": [
-        "INTERNET",
-        "RECORD_AUDIO",
-        "CAMERA",
-        "ACCESS_FINE_LOCATION"
-      ]
+      "permissions": ["INTERNET", "RECORD_AUDIO", "CAMERA", "ACCESS_FINE_LOCATION"]
     },
-
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-
+    "web": { "favicon": "./assets/favicon.png" },
     "plugins": [
       "expo-router",
       "expo-camera",
       "expo-location",
       [
         "@react-native-firebase/app",
-        {
-          "iosGoogleServicesFile": "./GoogleService-Info.plist",
-          "androidGoogleServicesFile": "./google-services.json"
-        }
+        { "iosGoogleServicesFile": "./GoogleService-Info.plist", "androidGoogleServicesFile": "./google-services.json" }
       ],
       "@react-native-firebase/auth"
     ],
-
     "extra": {
-      "API_URL": "http://10.0.2.2:5000",
+      "API_URL": "http://10.0.2.2:8000",
       "FIREBASE_API_KEY": "YOUR_API_KEY",
       "FIREBASE_AUTH_DOMAIN": "your-project.firebaseapp.com",
       "FIREBASE_PROJECT_ID": "your-project-id",
