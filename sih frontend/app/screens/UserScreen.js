@@ -1,30 +1,31 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, FlatList, ScrollView } from "react-native";
+import { LineChart } from "react-native-chart-kit";
+import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// 👇 Replace with your backend URL + inject user wallet from auth/session
-const API_URL = "http://<your-backend-ip>:8000";
-const USER_WALLET = "0x1234..."; // get this from logged-in user
+const API_URL = Constants.expoConfig?.extra?.API_URL ?? "http://10.0.2.2:8000";
 
 export default function UserDashboard() {
-  const [myProjects, setMyProjects] = useState<any[]>([]);
-  const [balances, setBalances] = useState<Record<string, number>>({});
+  const [userWallet, setUserWallet] = useState(null);
+  const [myProjects, setMyProjects] = useState([]);
+  const [balances, setBalances] = useState({});
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
 
-  const fetchMyData = async () => {
+  const fetchMyData = async (wallet) => {
     setLoading(true);
     try {
-      // 1. get projects where this user is participant/owner
-      const res = await fetch(`${API_URL}/projects?owner=${USER_WALLET}`);
+      const res = await fetch(`${API_URL}/projects?owner=${wallet}`);
       const data = await res.json();
-      setMyProjects(data);
+      const list = Array.isArray(data) ? data : [];
+      setMyProjects(list);
 
-      // 2. for each project, fetch balance
-      const bal: Record<string, number> = {};
-      for (const p of data) {
-        const bRes = await fetch(`${API_URL}/balance/${USER_WALLET}/${p.project_id}`);
+      const bal = {};
+      for (const p of list) {
+        const bRes = await fetch(`${API_URL}/balance/${wallet}/${p.project_id}`);
         const bData = await bRes.json();
-        bal[p.project_id] = bData.balance;
+        bal[p.project_id] = Number(bData?.balance ?? 0);
       }
       setBalances(bal);
     } catch (err) {
@@ -36,7 +37,20 @@ export default function UserDashboard() {
   };
 
   useEffect(() => {
-    fetchMyData();
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem("user");
+        if (raw) {
+          const u = JSON.parse(raw);
+          // if your backend returns/stores wallet, keep it here; else hardcode for now
+          const wallet = u?.wallet || "0x1234...";
+          setUserWallet(wallet);
+          fetchMyData(wallet);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    })();
   }, []);
 
   return (
@@ -46,7 +60,6 @@ export default function UserDashboard() {
       {loading && <Text>Loading…</Text>}
       {error && <Text style={{ color: "red" }}>{error}</Text>}
 
-      {/* user projects + balances */}
       <FlatList
         data={myProjects}
         keyExtractor={(item) => item.project_id}
@@ -54,18 +67,13 @@ export default function UserDashboard() {
           <View className="border rounded-lg p-3 mb-3">
             <Text className="font-semibold">{item.name || item.project_id}</Text>
             <Text className="text-xs text-gray-600">{item.project_type} • {item.location}</Text>
-
             <Text className="mt-1">My Balance: {balances[item.project_id] ?? 0} tCO₂e</Text>
-
-            {/* data they submitted (from DB fields) */}
             <Text className="mt-2 font-medium">My Data</Text>
             <Text className="text-xs text-gray-700">
               Species: {item.tree_species || "N/A"}, Height: {item.tree_height || "–"} m,
-              Biomass: {item.biomass_above_kg || 0}+{item.biomass_below_kg || 0} kg,
+              Biomass: {(item.biomass_above_kg || 0) + (item.biomass_below_kg || 0)} kg,
               SOC: {item.soil_organic_carbon_g_per_kg || "–"} g/kg
             </Text>
-
-            {/* mentor/minter info (assuming backend adds this to project or tx logs) */}
             <Text className="mt-2 text-xs text-gray-500">
               Issued by: {item.issued_by?.name || item.minter_name || "Unknown"}
             </Text>
@@ -73,7 +81,6 @@ export default function UserDashboard() {
         )}
       />
 
-      {/* optional: aggregate chart of balances */}
       {Object.keys(balances).length > 0 && (
         <View className="mt-6 border rounded-lg p-3">
           <Text className="font-semibold mb-2">Credits by Project</Text>
