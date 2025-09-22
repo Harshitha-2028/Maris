@@ -175,3 +175,4 @@ class BlueCarbonDatabase:
 
 # Global database instance
 db_client = BlueCarbonDatabase()
+
