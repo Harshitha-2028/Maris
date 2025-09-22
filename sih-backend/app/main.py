@@ -15,8 +15,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import blockchain + db
-from app.blockchain import bluecarbon_client
+from app.blockchain import get_blockchain_client
 from app.database import db_client
+
 
 # Create FastAPI app
 app = FastAPI(
@@ -24,6 +25,11 @@ app = FastAPI(
     description="API for managing carbon credits from South Indian projects",
     version="1.0.0",
 )
+def _require_chain():
+    bc = get_blockchain_client()
+    if bc is None:
+        raise HTTPException(status_code=503, detail="Blockchain disabled. Set ENABLE_BLOCKCHAIN=1 to enable.")
+    return bc
 
 # =======================
 #   AUTH (very simple)
@@ -310,3 +316,4 @@ if __name__ == "__main__":
     print("🚀 Starting BlueCarbon API...")
     print(f"🔗 Contract in use from registry: {bluecarbon_client.contract_address}")
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=True)
+
