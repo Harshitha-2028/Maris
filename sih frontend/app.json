@@ -1,62 +1,71 @@
-
 {
+  "expo": {
+    "name": "BlueCarbonRegistry",
+    "slug": "blue-carbon-registry",
+    "version": "1.0.0",
+    "scheme": "bluecarbon",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#4CAF50"
+    },
+    "assetBundlePatterns": ["**/*"],
 
-"expo": {
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bluecarbon.registry",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app uses the microphone for voice input.",
+        "NSCameraUsageDescription": "This app uses the camera for scanning/photos (optional).",
+        "NSLocationWhenInUseUsageDescription": "This app may use your location for project metadata (optional)."
+      }
+    },
 
-"name": "BlueCarbonRegistry",
+    "android": {
+      "package": "com.bluecarbon.registry",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#4CAF50"
+      },
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "INTERNET",
+        "RECORD_AUDIO",
+        "CAMERA",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
 
-"slug": "blue-carbon-registry",
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
 
-"version": "1.0.0",
+    "plugins": [
+      "expo-router",
+      "expo-camera",
+      "expo-location",
+      [
+        "@react-native-firebase/app",
+        {
+          "iosGoogleServicesFile": "./GoogleService-Info.plist",
+          "androidGoogleServicesFile": "./google-services.json"
+        }
+      ],
+      "@react-native-firebase/auth"
+    ],
 
-"scheme": "bluecarbon",
-
-"orientation": "portrait",
-
-"icon": "./assets/icon.png",
-
-"userInterfaceStyle": "light",
-
-"splash": {
-
-"image": "./assets/splash.png",
-
-"resizeMode": "contain",
-
-"backgroundColor": "#4CAF50"
-
-},
-
-"assetBundlePatterns": ["**/*"],
-
-"ios": {
-
-"supportsTablet": true
-
-},
-
-"android": {
-
-"adaptiveIcon": {
-
-"foregroundImage": "./assets/adaptive-icon.png",
-
-"backgroundColor": "#4CAF50"
-
-},
-
-"package": "com.bluecarbon.registry"
-
-},
-
-"web": {
-
-"favicon": "./assets/favicon.png"
-
-},
-
-"plugins": ["expo-camera", "expo-location", "expo-router"]
-
-}
-
+    "extra": {
+      "API_URL": "http://10.0.2.2:5000",
+      "FIREBASE_API_KEY": "YOUR_API_KEY",
+      "FIREBASE_AUTH_DOMAIN": "your-project.firebaseapp.com",
+      "FIREBASE_PROJECT_ID": "your-project-id",
+      "FIREBASE_STORAGE_BUCKET": "your-project.appspot.com",
+      "FIREBASE_MESSAGING_SENDER_ID": "YOUR_SENDER_ID",
+      "FIREBASE_APP_ID": "1:YOUR_SENDER_ID:android:YOURHASH"
+    }
+  }
 }
